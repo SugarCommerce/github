@@ -101,6 +101,7 @@ final class RestTest extends TestCase {
 		$http = ( new Fake() )->queue(
 			new Response( true, 200, '{"id":583231,"login":"octocat","type":"User"}' ),
 			new Response( false, 404 ),
+			new Response( true, 204 ),
 			new Response( false, 502 )
 		);
 		$rest = new Rest( $http );
@@ -108,6 +109,7 @@ final class RestTest extends TestCase {
 		$this->assertEquals( new User( 583231, 'octocat', 'User' ), $rest->user_by_id( 'tok', 583231 ) );
 		$this->assertSame( 'https://api.github.com/user/583231', $http->sent( 'GET' )[0]['url'] );
 		$this->assertFalse( $rest->user_by_id( 'tok', 583231 ) );
+		$this->assertFalse( $rest->user_by_id( 'tok', 583231 ), 'An answer naming nobody: there is nobody to name.' );
 		$this->assertNull( $rest->user_by_id( 'tok', 583231 ) );
 	}
 

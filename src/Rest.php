@@ -87,7 +87,8 @@ final readonly class Rest {
 	 * @param int    $id         GitHub user id.
 	 *
 	 * @return User|false|null False when GitHub has no such account (deleted,
-	 *                         so there is nobody to name); null when it could
+	 *                         so there is nobody to name) — a 404, or an
+	 *                         answer that names nobody; null when it could
 	 *                         not be asked, and the caller should not guess.
 	 */
 	public function user_by_id( #[\SensitiveParameter] string $credential, int $id ): User|false|null {
@@ -97,7 +98,7 @@ final readonly class Rest {
 			return false;
 		}
 
-		return $response->successful() ? User::from_array( (array) $response->json() ) : null;
+		return $response->successful() ? ( User::from_array( (array) $response->json() ) ?? false ) : null;
 	}
 
 	/**
