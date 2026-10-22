@@ -62,6 +62,10 @@ final class OAuthTest extends TestCase {
 	/**
 	 * GitHub answers a bad code with 200 and an `error`.
 	 */
+	public function test_a_dump_does_not_show_the_secret(): void {
+		$this->assertStringNotContainsString( 'shh', print_r( new OAuth( 'Iv1.abc', 'shh' ), true ) );
+	}
+
 	public function test_a_code_github_refuses_identifies_nobody(): void {
 		$http = ( new Fake() )->queue( new Response( true, 200, '{"error":"bad_verification_code"}' ) );
 

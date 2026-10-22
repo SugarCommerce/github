@@ -39,6 +39,8 @@ use SugarCommerce\HttpClient\Client as Http;
 final readonly class Rest {
 
 	/**
+	 * Make the REST calls through one HTTP client, under one name.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param Http   $http       HTTP client. Substitute `HttpClient\Fake` in tests.
@@ -75,7 +77,9 @@ final readonly class Rest {
 	 * @return User|null Null when there is no such login, or GitHub could not be asked.
 	 */
 	public function user( #[\SensitiveParameter] string $credential, string $login ): ?User {
-		return '' === $login ? null : $this->person( Api::BASE . '/users/' . rawurlencode( $login ), $credential );
+		$segment = self::segment( $login );
+
+		return '' === $segment ? null : $this->person( Api::BASE . '/users/' . $segment, $credential );
 	}
 
 	/**
@@ -98,7 +102,7 @@ final readonly class Rest {
 			return false;
 		}
 
-		return $response->successful() ? ( User::from_array( (array) $response->json() ) ?? false ) : null;
+		return $response->successful() ? ( User::from_array( self::object( $response->json() ) ) ?? false ) : null;
 	}
 
 	/**
@@ -118,9 +122,11 @@ final readonly class Rest {
 			return array();
 		}
 
+		$rows = self::object( $response->json() )['installations'] ?? array();
+
 		return array_values( array_filter( array_map(
 			static fn ( mixed $row ): int => is_array( $row ) && is_numeric( $row['id'] ?? null ) ? (int) $row['id'] : 0,
-			(array) ( $response->json()['installations'] ?? array() )
+			is_array( $rows ) ? $rows : array()
 		) ) );
 	}
 
@@ -136,10 +142,13 @@ final readonly class Rest {
 	 * @param string $login      Their current login.
 	 *
 	 * @return bool False for "not yet" (404) and "could not ask" alike; ask
-	 *              again later either way.
+	 *              again later either way. False, without asking, for a
+	 *              repository or login that is not one.
 	 */
 	public function is_collaborator( #[\SensitiveParameter] string $credential, string $repo, string $login ): bool {
-		return 204 === $this->http->get( Api::BASE . '/repos/' . Api::repo_path( $repo ) . '/collaborators/' . rawurlencode( $login ), Api::headers( $credential, $this->user_agent ) )->status;
+		$url = $this->collaborator_url( $repo, $login );
+
+		return '' !== $url && 204 === $this->http->get( $url, Api::headers( $credential, $this->user_agent ) )->status;
 	}
 
 	/**
@@ -152,20 +161,31 @@ final readonly class Rest {
 	 * @param string     $login      Their login.
 	 * @param Permission $permission The role to give.
 	 *
-	 * @return Invitation
+	 * @return Invitation Refused with status 0, without asking, for a
+	 *                    repository or login that is not one.
 	 */
 	#[\NoDiscard( 'A refused invitation means they have no access.' )]
 	public function invite( #[\SensitiveParameter] string $credential, string $repo, string $login, Permission $permission = Permission::Pull ): Invitation {
+		$url = $this->collaborator_url( $repo, $login );
+
+		if ( '' === $url ) {
+			return new Invitation( false, null, 0, 'Not a repository and login GitHub would accept.' );
+		}
+
 		$response = $this->http->put(
-			Api::BASE . '/repos/' . Api::repo_path( $repo ) . '/collaborators/' . rawurlencode( $login ),
+			$url,
 			(string) json_encode( array( 'permission' => $permission->value ) ),
 			Api::headers( $credential, $this->user_agent ) + array( 'Content-Type' => 'application/json' )
 		);
 
+		$json    = self::object( $response->json() );
+		$id      = is_numeric( $json['id'] ?? null ) ? (int) $json['id'] : 0;
+		$message = $json['message'] ?? '';
+
 		return match ( $response->status ) {
-			201     => new Invitation( true, is_numeric( $response->json()['id'] ?? null ) && (int) $response->json()['id'] > 0 ? (int) $response->json()['id'] : null, 201 ),
+			201     => new Invitation( true, $id > 0 ? $id : null, 201 ),
 			204     => new Invitation( true, null, 204 ),
-			default => new Invitation( false, null, $response->status, (string) ( is_array( $response->json() ) ? ( $response->json()['message'] ?? '' ) : '' ) ),
+			default => new Invitation( false, null, $response->status, is_string( $message ) ? $message : '' ),
 		};
 	}
 
@@ -179,9 +199,14 @@ final readonly class Rest {
 	 * @param int    $invitation GitHub's invitation id.
 	 *
 	 * @return bool True when it is gone, including when it already was.
+	 *              False, without asking, for a repository that is not one.
 	 */
 	#[\NoDiscard( 'False means the invitation may still be open.' )]
 	public function cancel_invitation( #[\SensitiveParameter] string $credential, string $repo, int $invitation ): bool {
+		if ( ! self::valid_repo( $repo ) ) {
+			return false;
+		}
+
 		$response = $this->http->delete( Api::BASE . '/repos/' . Api::repo_path( $repo ) . '/invitations/' . $invitation, Api::headers( $credential, $this->user_agent ) );
 
 		return $response->successful() || 404 === $response->status;
@@ -197,11 +222,18 @@ final readonly class Rest {
 	 * @param string $login      Their current login.
 	 *
 	 * @return bool True when they are not a collaborator now, including when
-	 *              they never were.
+	 *              they never were. False, without asking, for a repository
+	 *              or login that is not one.
 	 */
 	#[\NoDiscard( 'False means they may still have access.' )]
 	public function remove_collaborator( #[\SensitiveParameter] string $credential, string $repo, string $login ): bool {
-		$response = $this->http->delete( Api::BASE . '/repos/' . Api::repo_path( $repo ) . '/collaborators/' . rawurlencode( $login ), Api::headers( $credential, $this->user_agent ) );
+		$url = $this->collaborator_url( $repo, $login );
+
+		if ( '' === $url ) {
+			return false;
+		}
+
+		$response = $this->http->delete( $url, Api::headers( $credential, $this->user_agent ) );
 
 		return $response->successful() || 404 === $response->status;
 	}
@@ -246,7 +278,7 @@ final readonly class Rest {
 	 * @return bool
 	 */
 	public static function valid_repo( string $repo ): bool {
-		return 1 === preg_match( '#^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$#', $repo ) && ! str_ends_with( $repo, '/.' ) && ! str_ends_with( $repo, '/..' );
+		return 1 === preg_match( '#^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$#D', $repo ) && ! str_ends_with( $repo, '/.' ) && ! str_ends_with( $repo, '/..' );
 	}
 
 	/**
@@ -262,7 +294,7 @@ final readonly class Rest {
 	 * @return bool
 	 */
 	public static function looks_like_token( #[\SensitiveParameter] string $token ): bool {
-		return 1 === preg_match( '/^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$/', $token );
+		return 1 === preg_match( '/^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$/D', $token );
 	}
 
 	/**
@@ -276,6 +308,55 @@ final readonly class Rest {
 	private function person( string $url, #[\SensitiveParameter] string $credential ): ?User {
 		$response = $this->http->get( $url, Api::headers( $credential, $this->user_agent ) );
 
-		return $response->successful() ? User::from_array( (array) $response->json() ) : null;
+		return $response->successful() ? User::from_array( self::object( $response->json() ) ) : null;
+	}
+
+	/**
+	 * A collaborator's URL, or '' when the repository or login is not one.
+	 *
+	 * @param string $repo  owner/name.
+	 * @param string $login Their login.
+	 *
+	 * @return string
+	 */
+	private function collaborator_url( string $repo, string $login ): string {
+		$segment = self::segment( $login );
+
+		return self::valid_repo( $repo ) && '' !== $segment ? Api::BASE . '/repos/' . Api::repo_path( $repo ) . '/collaborators/' . $segment : '';
+	}
+
+	/**
+	 * A login as one URL path segment, or '' when it cannot be one.
+	 *
+	 * rawurlencode() leaves `.` alone, so a login of `..` would climb out
+	 * of `/collaborators/` once the path is resolved — and DELETE
+	 * /repos/{owner}/{name}/collaborators/.. is DELETE /repos/{owner}/{name},
+	 * which deletes the repository.
+	 *
+	 * @param string $login Login.
+	 *
+	 * @return string
+	 */
+	private static function segment( string $login ): string {
+		return '' === trim( $login, '.' ) ? '' : rawurlencode( $login );
+	}
+
+	/**
+	 * A decoded JSON object, or an empty one when it is anything else.
+	 *
+	 * @param mixed $json Decoded response body.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function object( mixed $json ): array {
+		$object = array();
+
+		foreach ( is_array( $json ) ? $json : array() as $key => $value ) {
+			if ( is_string( $key ) ) {
+				$object[ $key ] = $value;
+			}
+		}
+
+		return $object;
 	}
 }

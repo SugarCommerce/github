@@ -1,6 +1,6 @@
 {
     "name": "sugarcommerce/github",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "The GitHub calls for selling access to private repositories: a GitHub App's RS256 JWT and installation tokens, user sign-in with PKCE that handles GitHub's 200-with-an-error answer, and collaborator invitations kept by numeric id rather than by a login that can be renamed.",
     "type": "library",
     "license": "GPL-2.0-or-later",

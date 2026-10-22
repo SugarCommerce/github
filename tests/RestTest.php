@@ -138,6 +138,32 @@ final class RestTest extends TestCase {
 		$this->assertSame( array(), ( new Rest( ( new Fake() )->queue( new Response( false, 401 ) ) ) )->user_installations( 'ghu_x' ) );
 	}
 
+	/**
+	 * rawurlencode() leaves `..` alone: DELETE .../collaborators/.. is
+	 * DELETE /repos/{owner}/{name} once resolved — the repository deleted.
+	 */
+	public function test_a_dot_login_or_a_bad_repository_is_never_sent(): void {
+		$http = Fake::strict();
+		$rest = new Rest( $http );
+
+		$this->assertFalse( $rest->remove_collaborator( 'tok', 'midnight/stems', '..' ) );
+		$this->assertFalse( $rest->revoke_access( 'tok', 'midnight/stems', '.', null ) );
+		$this->assertFalse( $rest->is_collaborator( 'tok', 'midnight/stems', '..' ) );
+		$this->assertFalse( $rest->invite( 'tok', 'midnight/stems', '..' )->ok );
+		$this->assertFalse( $rest->invite( 'tok', 'midnight/..', 'octocat' )->ok );
+		$this->assertFalse( $rest->remove_collaborator( 'tok', '..', 'octocat' ) );
+		$this->assertFalse( $rest->cancel_invitation( 'tok', 'midnight/..', 77 ) );
+		$this->assertNull( $rest->user( 'tok', '..' ) );
+		$this->assertSame( array(), $http->sent() );
+	}
+
+	public function test_a_refusal_whose_message_is_not_text_reads_as_none(): void {
+		$http   = ( new Fake() )->queue( new Response( false, 422, '{"message":{"x":1},"id":"x"}' ) );
+		$result = ( new Rest( $http ) )->invite( 'tok', 'midnight/stems', 'octocat' );
+
+		$this->assertSame( '', $result->message );
+	}
+
 	/* ─── Shapes ────────────────────────────────────────────────────── */
 
 	/**
@@ -152,6 +178,7 @@ final class RestTest extends TestCase {
 			'a leading hyphen'  => array( '-midnight/stems', false ),
 			'a third segment'   => array( 'a/b/c', false ),
 			'an owner too long' => array( str_repeat( 'a', 40 ) . '/x', false ),
+			'a trailing newline' => array( "midnight/stems\n", false ),
 		);
 	}
 

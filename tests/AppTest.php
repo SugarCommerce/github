@@ -85,6 +85,21 @@ final class AppTest extends TestCase {
 		$this->assertNull( $app->installation( 1 ) );
 	}
 
+	public function test_a_dump_does_not_show_the_key(): void {
+		$dump = print_r( new App( '12345', 'my-app', self::$pem ), true );
+
+		$this->assertStringNotContainsString( 'PRIVATE KEY', $dump );
+		$this->assertStringContainsString( '12345', $dump );
+	}
+
+	public function test_a_token_that_is_not_text_is_none(): void {
+		$http = ( new Fake() )->queue( new Response( true, 201, '{"token":["x"]}' ), new Response( true, 200, '{"account":"x"}' ) );
+		$app  = new App( '12345', 'my-app', self::$pem, $http );
+
+		$this->assertSame( '', $app->installation_token( 9 ) );
+		$this->assertSame( '', $app->installation( 9 ) );
+	}
+
 	public function test_the_install_link_carries_the_state(): void {
 		$url = ( new App( '1', 'my app', self::$pem ) )->install_url( 'st&1' );
 

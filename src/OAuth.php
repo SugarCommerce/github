@@ -45,6 +45,8 @@ final readonly class OAuth {
 	private Rest $rest;
 
 	/**
+	 * Hold the App's OAuth credentials.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param string $client_id     The App's client id.
@@ -187,7 +189,10 @@ final readonly class OAuth {
 		);
 
 		// 200 with an `error` for a bad code: the token's absence is the test.
-		return $response->successful() ? (string) ( $response->json()['access_token'] ?? '' ) : '';
+		$json  = $response->successful() ? $response->json() : null;
+		$token = is_array( $json ) ? ( $json['access_token'] ?? '' ) : '';
+
+		return is_string( $token ) ? $token : '';
 	}
 
 	/**
@@ -212,5 +217,20 @@ final readonly class OAuth {
 				'User-Agent'           => $this->user_agent,
 			)
 		)->successful();
+	}
+
+	/**
+	 * What var_dump() and print_r() show: the client, with its secret redacted.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function __debugInfo(): array {
+		return array(
+			'client_id'     => $this->client_id,
+			'client_secret' => '' === $this->client_secret ? '' : '[redacted]',
+			'user_agent'    => $this->user_agent,
+		);
 	}
 }

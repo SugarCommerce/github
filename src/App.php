@@ -40,6 +40,8 @@ use SugarCommerce\SignedTokens\Base64Url;
 final readonly class App {
 
 	/**
+	 * Hold the App's identity and key.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param string $app_id      The App's id.
@@ -103,7 +105,15 @@ final readonly class App {
 
 		$response = $this->http->get( Api::BASE . '/app/installations/' . $installation, Api::headers( $jwt, $this->user_agent ) );
 
-		return $response->successful() ? (string) ( $response->json()['account']['login'] ?? '' ) : null;
+		if ( ! $response->successful() ) {
+			return null;
+		}
+
+		$json    = $response->json();
+		$account = is_array( $json ) ? ( $json['account'] ?? null ) : null;
+		$login   = is_array( $account ) ? ( $account['login'] ?? '' ) : '';
+
+		return is_string( $login ) ? $login : '';
 	}
 
 	/**
@@ -124,7 +134,10 @@ final readonly class App {
 
 		$response = $this->http->post( Api::BASE . '/app/installations/' . $installation . '/access_tokens', '', Api::headers( $jwt, $this->user_agent ) );
 
-		return $response->successful() ? (string) ( $response->json()['token'] ?? '' ) : '';
+		$json  = $response->successful() ? $response->json() : null;
+		$token = is_array( $json ) ? ( $json['token'] ?? '' ) : '';
+
+		return is_string( $token ) ? $token : '';
 	}
 
 	/**
@@ -151,10 +164,26 @@ final readonly class App {
 		$signature = '';
 
 		// openssl_sign warns on a key it cannot read; the empty answer says so.
-		if ( ! @openssl_sign( $header . '.' . $payload, $signature, $this->private_key, OPENSSL_ALGO_SHA256 ) ) {
+		if ( ! @openssl_sign( $header . '.' . $payload, $signature, $this->private_key, OPENSSL_ALGO_SHA256 ) || ! is_string( $signature ) ) {
 			return '';
 		}
 
 		return $header . '.' . $payload . '.' . Base64Url::encode( $signature );
+	}
+
+	/**
+	 * What var_dump() and print_r() show: the App, with its key redacted.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function __debugInfo(): array {
+		return array(
+			'app_id'      => $this->app_id,
+			'slug'        => $this->slug,
+			'private_key' => '' === $this->private_key ? '' : '[redacted]',
+			'user_agent'  => $this->user_agent,
+		);
 	}
 }

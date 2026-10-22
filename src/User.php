@@ -26,6 +26,8 @@ namespace SugarCommerce\Github;
 final readonly class User {
 
 	/**
+	 * An account, by id and current login.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param int    $id    GitHub's numeric id. Permanent.

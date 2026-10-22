@@ -25,11 +25,30 @@ namespace SugarCommerce\Github;
  */
 enum Permission: string {
 
-	case Pull     = 'pull';
-	case Triage   = 'triage';
-	case Push     = 'push';
+	/**
+	 * Read and clone. What a buyer should get.
+	 */
+	case Pull = 'pull';
+
+	/**
+	 * Read, and manage issues and pull requests without writing code.
+	 */
+	case Triage = 'triage';
+
+	/**
+	 * Write code.
+	 */
+	case Push = 'push';
+
+	/**
+	 * Write code and manage the repository, short of destructive actions.
+	 */
 	case Maintain = 'maintain';
-	case Admin    = 'admin';
+
+	/**
+	 * Everything, including deleting the repository.
+	 */
+	case Admin = 'admin';
 
 	/**
 	 * Whether this role can change the repository's code.

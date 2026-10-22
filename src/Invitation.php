@@ -27,6 +27,8 @@ namespace SugarCommerce\Github;
 final readonly class Invitation {
 
 	/**
+	 * What GitHub answered an invitation with.
+	 *
 	 * @since 1.0.0
 	 *
 	 * @param bool     $ok      Whether they are invited or already in.
