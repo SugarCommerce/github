@@ -94,7 +94,7 @@ $user = $rest->user_by_id( $token, $id );   // User, false (deleted) or null (as
 $rest->revoke_access( $token, 'midnight/stems', false === $user ? '' : $user->login, $sent->id );
 ```
 
-`Rest::valid_repo()` and `Rest::looks_like_token()` check shapes before anything goes into a URL or a request.
+`Rest::valid_repo()` and `Rest::looks_like_token()` check shapes before anything goes into a URL or a request. The collaborator calls check the repository with `valid_repo()` themselves, and refuse a login of `.` or `..` — which, resolved, would make removing a collaborator `DELETE /repos/{owner}/{name}` — without asking GitHub.
 
 ## Testing
 
@@ -103,7 +103,7 @@ composer install
 composer test
 ```
 
-38 tests, all against `HttpClient\Fake` — nothing reaches GitHub. The JWT is verified with the key's public half; the token exchange's 200-with-an-error; token revocation after use; install codes without a redirect or verifier; both kinds of successful invitation; cancelling and removing, with 404 as success; a deleted account versus an unreachable API; repository and token shapes; permissions; and the `#[\NoDiscard]` results.
+44 tests, all against `HttpClient\Fake` — nothing reaches GitHub. The JWT is verified with the key's public half; the token exchange's 200-with-an-error; token revocation after use; install codes without a redirect or verifier; both kinds of successful invitation; cancelling and removing, with 404 as success; a deleted account versus an unreachable API; repository and token shapes; permissions; and the `#[\NoDiscard]` results.
 
 ## License
 
